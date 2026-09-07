@@ -26,6 +26,12 @@ export interface MajorTick {
     label: string
 }
 
+/** Échelle imposée à l'axe, en remplacement du choix automatique. */
+export interface ForcedTimeScale {
+    unit: TimeUnit
+    step?: number
+}
+
 export interface TimeAxis {
     scale: TimeScale
     minor: MinorTick[]
@@ -231,16 +237,24 @@ export function buildTimeAxis(
     startMs: number,
     endMs: number,
     width: number,
-    options: { locale?: string; weekStart?: number; minTickWidth?: number } = {},
+    options: {
+        locale?: string
+        weekStart?: number
+        minTickWidth?: number
+        /** Échelle imposée : sinon la plus lisible est choisie d'après la largeur disponible. */
+        scale?: ForcedTimeScale | null
+    } = {},
 ): TimeAxis {
-    const { locale, weekStart = 1, minTickWidth = 60 } = options
+    const { locale, weekStart = 1, minTickWidth = 60, scale: forcedScale } = options
     const rangeMs = endMs - startMs
 
     if (!(rangeMs > 0) || !(width > 0)) {
         return { scale: SCALES[0], minor: [], major: [] }
     }
 
-    const scale = pickScale(rangeMs, width, minTickWidth)
+    const scale: TimeScale = forcedScale
+        ? { unit: forcedScale.unit, step: forcedScale.step ?? 1, approxMs: 0 }
+        : pickScale(rangeMs, width, minTickWidth)
     const toX = (ms: number) => ((ms - startMs) / rangeMs) * width
     const todayKey = new Date().toDateString()
 

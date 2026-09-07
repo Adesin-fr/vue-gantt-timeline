@@ -4,6 +4,7 @@ import GanttTimeline from './GanttTimeline.vue'
 export { GanttTimeline }
 export * from './types'
 export { buildTimeAxis, toMs, floorDate, addDate } from './utils/time'
+export type { ForcedTimeScale, TimeAxis, TimeUnit } from './utils/time'
 export { stackItems } from './utils/stack'
 
 export default {

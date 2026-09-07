@@ -74,6 +74,7 @@ revient à sa position d'origine.
 | `laneHeight` / `laneGap` / `rowPadding` / `minRowHeight` | `26` / `2` / `4` / `40` | métriques verticales |
 | `minItemWidth` / `itemMargin` | `6` / `2` | largeur minimale d'un bloc, écart de collision |
 | `locale` / `weekStart` | navigateur / `1` | axe temporel |
+| `timeScale` | — | impose l'échelle de l'axe, ex. `{ unit: 'day', step: 1 }` (sinon déduite de la largeur) |
 | `showCurrentTime` | `true` | trait de l'heure courante |
 | `overscan` | `3` | lignes rendues hors zone visible |
 | `pannable` | `false` | défilement de la plage au clic-glisser dans le vide |

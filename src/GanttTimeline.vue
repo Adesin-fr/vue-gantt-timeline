@@ -18,6 +18,7 @@ import type {
     GanttRow,
     GanttSnap,
 } from './types'
+import type { ForcedTimeScale } from './utils/time'
 import { buildTimeAxis, toMs } from './utils/time'
 import { stackItems } from './utils/stack'
 
@@ -67,6 +68,8 @@ const props = withDefaults(
         overscan?: number
         /** Largeur minimale d'une graduation de l'axe, en pixels. */
         minTickWidth?: number
+        /** Impose l'échelle de l'axe (ex. `{ unit: 'day' }`) au lieu de la déduire de la largeur. */
+        timeScale?: ForcedTimeScale | null
         /** Autorise le défilement de la plage de dates au clic-glisser dans le vide. */
         pannable?: boolean
         /** Autorise le zoom au pincement et à la molette + ctrl (cmd sur macOS). */
@@ -99,6 +102,7 @@ const props = withDefaults(
         order: undefined,
         overscan: 3,
         minTickWidth: 60,
+        timeScale: null,
         pannable: false,
         zoomable: false,
         zoomMin: 10 * 60 * 1000,
@@ -321,6 +325,7 @@ const axis = computed(() =>
         locale: props.locale,
         weekStart: props.weekStart,
         minTickWidth: props.minTickWidth,
+        scale: props.timeScale,
     }),
 )
 
