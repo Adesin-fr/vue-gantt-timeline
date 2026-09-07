@@ -1,15 +1,15 @@
 {
   "name": "@adesin-fr/vue-gantt-timeline",
-  "version": "0.1.0",
+  "version": "2026.37.1",
   "description": "Composant Vue 3 de planning / gantt : groupes, éléments déplaçables, empilement automatique, rendu personnalisable.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LudovicLemarinel/vue-gantt-timeline.git"
+    "url": "git+https://github.com/adesin-fr/vue-gantt-timeline.git"
   },
-  "homepage": "https://github.com/LudovicLemarinel/vue-gantt-timeline#readme",
+  "homepage": "https://github.com/adesin-fr/vue-gantt-timeline#readme",
   "bugs": {
-    "url": "https://github.com/LudovicLemarinel/vue-gantt-timeline/issues"
+    "url": "https://github.com/adesin-fr/vue-gantt-timeline/issues"
   },
   "keywords": [
     "vue",
