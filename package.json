@@ -1,0 +1,40 @@
+{
+  "name": "@adesin-fr/vue-gantt-timeline",
+  "version": "0.1.0",
+  "description": "Composant Vue 3 de planning / gantt : groupes, éléments déplaçables, empilement automatique, rendu personnalisable.",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/vue-gantt-timeline.umd.cjs",
+  "module": "./dist/vue-gantt-timeline.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/vue-gantt-timeline.js",
+      "require": "./dist/vue-gantt-timeline.umd.cjs"
+    },
+    "./style.css": "./dist/vue-gantt-timeline.css"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build --mode lib",
+    "build:watch": "vite build --mode lib --watch",
+    "build:demo": "vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "peerDependencies": {
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "^5.6.0",
+    "vite": "^7.0.0",
+    "vite-plugin-dts": "^4.5.0",
+    "vue": "^3.5.0",
+    "vue-tsc": "^2.1.10"
+  }
+}
