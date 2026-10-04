@@ -243,9 +243,11 @@ export function buildTimeAxis(
         minTickWidth?: number
         /** Échelle imposée : sinon la plus lisible est choisie d'après la largeur disponible. */
         scale?: ForcedTimeScale | null
+        /** Projection d'un instant en pixels, quand l'axe n'est pas linéaire (plages masquées). */
+        project?: (ms: number) => number
     } = {},
 ): TimeAxis {
-    const { locale, weekStart = 1, minTickWidth = 60, scale: forcedScale } = options
+    const { locale, weekStart = 1, minTickWidth = 60, scale: forcedScale, project } = options
     const rangeMs = endMs - startMs
 
     if (!(rangeMs > 0) || !(width > 0)) {
@@ -255,7 +257,7 @@ export function buildTimeAxis(
     const scale: TimeScale = forcedScale
         ? { unit: forcedScale.unit, step: forcedScale.step ?? 1, approxMs: 0 }
         : pickScale(rangeMs, width, minTickWidth)
-    const toX = (ms: number) => ((ms - startMs) / rangeMs) * width
+    const toX = project ?? ((ms: number) => ((ms - startMs) / rangeMs) * width)
     const todayKey = new Date().toDateString()
 
     const minor: MinorTick[] = []

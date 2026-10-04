@@ -75,6 +75,7 @@ revient à sa position d'origine.
 | `minItemWidth` / `itemMargin` | `6` / `2` | largeur minimale d'un bloc, écart de collision |
 | `locale` / `weekStart` | navigateur / `1` | axe temporel |
 | `timeScale` | — | impose l'échelle de l'axe, ex. `{ unit: 'day', step: 1 }` (sinon déduite de la largeur) |
+| `hiddenTimeRanges` | `[]` | plages horaires récurrentes retirées de l'axe, ex. `[{ start: '18:00', end: '08:00' }]` (nuit) ou `[{ start: '00:00', end: '24:00', days: [0, 6] }]` (week-end). Voir ci-dessous |
 | `showCurrentTime` | `true` | trait de l'heure courante |
 | `overscan` | `3` | lignes rendues hors zone visible |
 | `pannable` | `false` | défilement de la plage au clic-glisser dans le vide |
@@ -134,3 +135,14 @@ resolve: { dedupe: ['vue'] },
 server: { fs: { allow: ['..'] } },
 optimizeDeps: { exclude: ['@adesin-fr/vue-gantt-timeline'] },
 ```
+
+## Masquer des plages horaires
+
+`hiddenTimeRanges` reçoit un tableau de `{ start, end, days? }` (`HH:mm`, `24:00` accepté pour `end`).
+Si `start` est après `end`, la plage passe minuit et appartient au jour où elle commence. `days`
+(0 = dimanche … 6 = samedi) restreint la plage à certains jours de début.
+
+Les plages masquées ne prennent aucune largeur : le temps visible est mis bout à bout, un trait
+pointillé marque chaque coupure, et les blocs entièrement masqués ne sont pas rendus. Un bloc à cheval
+sur une coupure est affiché d'un seul tenant. `zoomMin` / `zoomMax` s'appliquent à la durée *visible*.
+`start` / `end` (et `range-change`) restent de vrais instants.

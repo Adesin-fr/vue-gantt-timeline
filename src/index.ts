@@ -5,6 +5,7 @@ export { GanttTimeline }
 export * from './types'
 export { buildTimeAxis, toMs, floorDate, addDate } from './utils/time'
 export type { ForcedTimeScale, TimeAxis, TimeUnit } from './utils/time'
+export { VisibleTimeline, parseHiddenRanges, shiftByVisible, visibleDuration } from './utils/hidden'
 export { stackItems } from './utils/stack'
 
 export default {

@@ -1,5 +1,17 @@
 export type DateLike = Date | string | number
 
+/**
+ * Plage horaire récurrente retirée de l'axe (heures de nuit, week-end, pause...).
+ * Les bornes sont au format `HH:mm` (`24:00` accepté pour la fin). Si `start` est après `end`,
+ * la plage passe minuit : `{ start: '18:00', end: '08:00' }` masque la nuit.
+ */
+export interface HiddenTimeRange {
+    start: string
+    end: string
+    /** Jours de début concernés (0 = dimanche … 6 = samedi) ; absent = tous les jours. */
+    days?: number[]
+}
+
 /** Une ligne du planning (un utilisateur, une machine, ...). */
 export interface GanttGroup {
     id: string | number

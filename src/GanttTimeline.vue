@@ -17,9 +17,11 @@ import type {
     GanttRangeChangeReason,
     GanttRow,
     GanttSnap,
+    HiddenTimeRange,
 } from './types'
 import type { ForcedTimeScale } from './utils/time'
 import { buildTimeAxis, toMs } from './utils/time'
+import { VisibleTimeline, parseHiddenRanges, shiftByVisible, visibleDuration } from './utils/hidden'
 import { stackItems } from './utils/stack'
 
 const props = withDefaults(
@@ -70,6 +72,12 @@ const props = withDefaults(
         minTickWidth?: number
         /** Impose l'échelle de l'axe (ex. `{ unit: 'day' }`) au lieu de la déduire de la largeur. */
         timeScale?: ForcedTimeScale | null
+        /**
+         * Plages horaires récurrentes retirées de l'axe (ex. la nuit : `{ start: '18:00', end: '08:00' }`).
+         * Elles ne prennent aucune place : le temps visible est mis bout à bout, `zoomMin` / `zoomMax`
+         * s'appliquent alors à la durée visible, et les blocs entièrement masqués ne sont pas rendus.
+         */
+        hiddenTimeRanges?: HiddenTimeRange[]
         /** Autorise le défilement de la plage de dates au clic-glisser dans le vide. */
         pannable?: boolean
         /** Autorise le zoom au pincement et à la molette + ctrl (cmd sur macOS). */
@@ -103,6 +111,7 @@ const props = withDefaults(
         overscan: 3,
         minTickWidth: 60,
         timeScale: null,
+        hiddenTimeRanges: () => [],
         pannable: false,
         zoomable: false,
         zoomMin: 10 * 60 * 1000,
@@ -159,11 +168,19 @@ watch(
 
 const windowStart = computed(() => innerStart.value)
 const windowEnd = computed(() => innerEnd.value)
-const rangeMs = computed(() => Math.max(1, windowEnd.value - windowStart.value))
-const pxPerMs = computed(() => contentWidth.value / rangeMs.value)
+const hiddenRanges = computed(() => parseHiddenRanges(props.hiddenTimeRanges))
+const timeline = computed(() => new VisibleTimeline(hiddenRanges.value, windowStart.value, windowEnd.value))
 
-const timeToX = (ms: number) => (ms - windowStart.value) * pxPerMs.value
-const xToTime = (x: number) => windowStart.value + (pxPerMs.value > 0 ? x / pxPerMs.value : 0)
+// Les échelles de pixels sont exprimées par milliseconde *visible* : les plages masquées
+// n'occupent aucune largeur.
+const pxPerMs = computed(() => contentWidth.value / timeline.value.span)
+
+const timeToX = (ms: number) => timeline.value.offset(ms) * pxPerMs.value
+const xToTime = (x: number) => (pxPerMs.value > 0 ? timeline.value.toTime(x / pxPerMs.value) : windowStart.value)
+
+/** Date atteinte en se déplaçant de `dx` pixels depuis `ms`, plages masquées sautées. */
+const shiftByPixels = (ms: number, dx: number, scale = pxPerMs.value) =>
+    shiftByVisible(hiddenRanges.value, ms, scale > 0 ? dx / scale : 0)
 
 /* ------------------------------------------------------------------ édition */
 
@@ -242,6 +259,17 @@ const rows = computed<GanttRow[]>(() => {
             // Hors de la fenêtre affichée : le bloc n'est tout simplement pas rendu.
             if (endMs < ws || startMs > we) {
                 continue
+            }
+
+            // Entièrement dans une plage masquée : rien à montrer.
+            if (timeline.value.hasHidden) {
+                const fullyHidden =
+                    endMs > startMs
+                        ? timeline.value.offset(startMs) === timeline.value.offset(endMs)
+                        : timeline.value.isHidden(startMs)
+                if (fullyHidden) {
+                    continue
+                }
             }
 
             const rawLeft = timeToX(startMs)
@@ -326,15 +354,35 @@ const axis = computed(() =>
         weekStart: props.weekStart,
         minTickWidth: props.minTickWidth,
         scale: props.timeScale,
+        project: timeline.value.hasHidden ? timeToX : undefined,
     }),
 )
+
+/** Coupures de l'axe : un trait là où une plage masquée a été retirée. */
+const hiddenBreaks = computed(() => {
+    const breaks: { key: string; x: number }[] = []
+    let lastX = -Infinity
+    for (const interval of timeline.value.intervals) {
+        const x = timeToX(interval.start)
+        if (x > 0.5 && x < contentWidth.value - 0.5 && x - lastX >= 4) {
+            breaks.push({ key: 'b' + interval.start, x })
+            lastX = x
+        }
+    }
+    return breaks
+})
 
 // La première graduation est rognée sur le bord gauche : son trait ferait doublon
 // avec la bordure de la colonne des groupes.
 const gridLines = computed(() => axis.value.minor.filter((tick) => tick.x > 0.5))
 
 const currentTimeX = computed(() => {
-    if (!props.showCurrentTime || now.value < windowStart.value || now.value > windowEnd.value) {
+    if (
+        !props.showCurrentTime ||
+        now.value < windowStart.value ||
+        now.value > windowEnd.value ||
+        timeline.value.isHidden(now.value)
+    ) {
         return null
     }
     return timeToX(now.value)
@@ -453,14 +501,16 @@ function onPointerMove(event: PointerEvent) {
     }
     state.moved = true
 
-    const deltaMs = pxPerMs.value > 0 ? dx / pxPerMs.value : 0
     const editable = itemEditable(state.item)
 
     if (state.handle === 'body') {
         if (editable.updateTime) {
             const duration = state.origEnd - state.origStart
             const maxStart = Math.max(windowStart.value, windowEnd.value - duration)
-            const start = Math.min(Math.max(applySnap(state.origStart + deltaMs, 'move'), windowStart.value), maxStart)
+            const start = Math.min(
+                Math.max(applySnap(shiftByPixels(state.origStart, dx), 'move'), windowStart.value),
+                maxStart,
+            )
             state.start = start
             state.end = start + duration
         }
@@ -471,10 +521,10 @@ function onPointerMove(event: PointerEvent) {
             }
         }
     } else if (state.handle === 'start') {
-        const start = applySnap(state.origStart + deltaMs, 'resize')
+        const start = applySnap(shiftByPixels(state.origStart, dx), 'resize')
         state.start = Math.min(Math.max(start, windowStart.value), state.origEnd - props.minDuration)
     } else {
-        const end = applySnap(state.origEnd + deltaMs, 'resize')
+        const end = applySnap(shiftByPixels(state.origEnd, dx), 'resize')
         state.end = Math.max(Math.min(end, windowEnd.value), state.origStart + props.minDuration)
     }
 
@@ -521,6 +571,8 @@ interface PanState {
     pointerY: number
     startMs: number
     endMs: number
+    /** Échelle figée au début du geste : elle varie avec la fenêtre quand des plages sont masquées. */
+    pxPerMs: number
     scrollTop: number
     moved: boolean
 }
@@ -535,8 +587,19 @@ function applyWindow(startMs: number, endMs: number, reason: GanttRangeChangeRea
     let span = endMs - startMs
     let start = startMs
 
+    let end = endMs
+
     if (reason === 'zoom') {
-        span = Math.min(Math.max(span, props.zoomMin), props.zoomMax)
+        if (hiddenRanges.value.length > 0) {
+            const visible = visibleDuration(hiddenRanges.value, startMs, endMs)
+            const clamped = Math.min(Math.max(visible, props.zoomMin), props.zoomMax)
+            if (clamped !== visible) {
+                end = shiftByVisible(hiddenRanges.value, startMs, clamped)
+                span = end - startMs
+            }
+        } else {
+            span = Math.min(Math.max(span, props.zoomMin), props.zoomMax)
+        }
     }
 
     const min = limitStart.value
@@ -554,7 +617,7 @@ function applyWindow(startMs: number, endMs: number, reason: GanttRangeChangeRea
         }
     }
 
-    const end = start + span
+    end = start + span
 
     if (start === innerStart.value && end === innerEnd.value) {
         return
@@ -584,6 +647,7 @@ function onBodyPointerDown(event: PointerEvent) {
         pointerY: event.clientY,
         startMs: windowStart.value,
         endMs: windowEnd.value,
+        pxPerMs: pxPerMs.value,
         scrollTop: bodyEl.value?.scrollTop ?? 0,
         moved: false,
     }
@@ -606,9 +670,12 @@ function onPanMove(event: PointerEvent) {
     }
     state.moved = true
 
-    if (pxPerMs.value > 0 && dx !== 0) {
-        const deltaMs = dx / pxPerMs.value
-        applyWindow(state.startMs - deltaMs, state.endMs - deltaMs, 'pan')
+    if (state.pxPerMs > 0 && dx !== 0) {
+        applyWindow(
+            shiftByPixels(state.startMs, -dx, state.pxPerMs),
+            shiftByPixels(state.endMs, -dx, state.pxPerMs),
+            'pan',
+        )
     }
 
     if (bodyEl.value) {
@@ -629,7 +696,7 @@ function onPanEnd() {
     }
 }
 
-/** Zoome autour du point situé sous le curseur, pour que la date visée ne bouge pas. */
+/** Zoome autour du point situé sous le curseur, pour que la date visée ne bouge pas. `span` est une durée visible. */
 function zoomToSpanAt(clientX: number, span: number) {
     const grid = gridEl.value
     if (!grid || contentWidth.value <= 0) {
@@ -642,7 +709,11 @@ function zoomToSpanAt(clientX: number, span: number) {
     const ratio = x / contentWidth.value
     const clamped = Math.min(Math.max(span, props.zoomMin), props.zoomMax)
 
-    applyWindow(anchor - clamped * ratio, anchor + clamped * (1 - ratio), 'zoom')
+    applyWindow(
+        shiftByVisible(hiddenRanges.value, anchor, -clamped * ratio),
+        shiftByVisible(hiddenRanges.value, anchor, clamped * (1 - ratio)),
+        'zoom',
+    )
 }
 
 function onWheel(event: WheelEvent) {
@@ -652,7 +723,7 @@ function onWheel(event: WheelEvent) {
 
     event.preventDefault()
     const factor = Math.exp(event.deltaY * 0.002)
-    zoomToSpanAt(event.clientX, (windowEnd.value - windowStart.value) * factor)
+    zoomToSpanAt(event.clientX, timeline.value.span * factor)
 }
 
 /** Pincement : évènements `gesture*` de WebKit, sinon suivi manuel de deux doigts. */
@@ -664,7 +735,7 @@ function onGestureStart(event: Event) {
         return
     }
     event.preventDefault()
-    gestureSpan = windowEnd.value - windowStart.value
+    gestureSpan = timeline.value.span
     gestureClientX = (event as unknown as { clientX: number }).clientX
 }
 
@@ -692,7 +763,7 @@ function onTouchStart(event: TouchEvent) {
         return
     }
     pinchDistance = touchDistance(event.touches)
-    gestureSpan = windowEnd.value - windowStart.value
+    gestureSpan = timeline.value.span
     gestureClientX = (event.touches[0].clientX + event.touches[1].clientX) / 2
 }
 
@@ -882,6 +953,12 @@ defineExpose({ scrollToGroup, setWindow, rows, axis, timeToX, xToTime })
                         class="vgt__grid-line"
                         :class="{ 'vgt__grid-line--weekend': tick.weekend }"
                         :style="{ left: tick.x + 'px', width: tick.width + 'px' }"
+                    />
+                    <div
+                        v-for="cut in hiddenBreaks"
+                        :key="cut.key"
+                        class="vgt__grid-break"
+                        :style="{ left: cut.x + 'px' }"
                     />
                     <div v-if="currentTimeX !== null" class="vgt__now" :style="{ left: currentTimeX + 'px' }" />
                 </div>
@@ -1111,6 +1188,14 @@ defineExpose({ scrollToGroup, setWindow, rows, axis, timeToX, xToTime })
 
 .vgt__grid-line--weekend {
     background: var(--vgt-weekend);
+}
+
+.vgt__grid-break {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1px dashed var(--vgt-border-strong);
 }
 
 .vgt__now {
