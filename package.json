@@ -1,6 +1,6 @@
 {
   "name": "@adesin-fr/vue-gantt-timeline",
-  "version": "2026.37.2",
+  "version": "2026.40.1",
   "description": "Composant Vue 3 de planning / gantt : groupes, éléments déplaçables, empilement automatique, rendu personnalisable.",
   "license": "MIT",
   "repository": {
