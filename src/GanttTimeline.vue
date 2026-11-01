@@ -1,8 +1,13 @@
+<script lang="ts">
+let instanceCount = 0
+</script>
+
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type {
     DateLike,
     GanttBackgroundEvent,
+    GanttDependency,
     GanttDragKind,
     GanttEditable,
     GanttEditableOption,
@@ -23,6 +28,7 @@ import type { ForcedTimeScale } from './utils/time'
 import { buildTimeAxis, toMs } from './utils/time'
 import { VisibleTimeline, parseHiddenRanges, shiftByVisible, visibleDuration } from './utils/hidden'
 import { stackItems } from './utils/stack'
+import { buildDependencyPaths, dependencyChain } from './utils/dependencies'
 
 const props = withDefaults(
     defineProps<{
@@ -30,6 +36,13 @@ const props = withDefaults(
         groups: GanttGroup[]
         /** Blocs à afficher. Ceux hors de la fenêtre [start, end] ne sont pas rendus. */
         items: GanttItem[]
+        /** Flèches de dépendance entre blocs : du bord droit de `from` au bord gauche de `to`. */
+        dependencies?: GanttDependency[]
+        /**
+         * Regroupe des blocs en un seul maillon de chaîne de dépendances (une même tâche affichée
+         * sur plusieurs lignes) : ils sont mis en évidence ensemble. Défaut : l'id du bloc.
+         */
+        dependencyKey?: (item: GanttItem) => string | number
         /** Début de la fenêtre affichée. */
         start: DateLike
         /** Fin de la fenêtre affichée. */
@@ -92,6 +105,8 @@ const props = withDefaults(
         maxDate?: DateLike
     }>(),
     {
+        dependencies: () => [],
+        dependencyKey: undefined,
         groupWidth: 180,
         laneHeight: 26,
         laneGap: 2,
@@ -332,6 +347,33 @@ const rows = computed<GanttRow[]>(() => {
     return result
 })
 
+// Un identifiant par instance : plusieurs plannings sur une page ne partagent pas leur pointe.
+const arrowMarkerId = `vgt-arrow-${++instanceCount}`
+
+/** Suit `rows`, donc la position provisoire d'un bloc en cours de déplacement. */
+const dependencyPaths = computed(() =>
+    buildDependencyPaths(rows.value, props.dependencies, {
+        rowPadding: props.rowPadding,
+        laneHeight: props.laneHeight,
+        laneGap: props.laneGap,
+    }),
+)
+
+const keyOfItem = (item: GanttItem) => String(props.dependencyKey ? props.dependencyKey(item) : item.id)
+
+/**
+ * Chaîne de dépendances du bloc saisi (déplacement ou redimensionnement), mise en évidence dès
+ * l'appui. Rien n'est mis en évidence pour un bloc sans parent ni enfant.
+ */
+const highlightedChain = computed(() => {
+    const state = drag.value
+    if (!state || props.dependencies.length === 0) {
+        return null
+    }
+    const chain = dependencyChain(props.items, props.dependencies, state.item, props.dependencyKey)
+    return chain.keys.size > 1 ? chain : null
+})
+
 const totalHeight = computed(() => {
     const last = rows.value[rows.value.length - 1]
     return last ? last.top + last.height : 0
@@ -405,6 +447,7 @@ function itemClasses(placed: GanttPlacedItem) {
             'vgt__item--clipped-start': placed.clippedStart,
             'vgt__item--clipped-end': placed.clippedEnd,
             'vgt__item--dragging': placed.dragging,
+            'vgt__item--chain': highlightedChain.value?.keys.has(keyOfItem(placed.item)) ?? false,
             'vgt__item--editable': editable.updateTime || editable.updateGroup,
         },
     ]
@@ -963,6 +1006,37 @@ defineExpose({ scrollToGroup, setWindow, rows, axis, timeToX, xToTime })
                     <div v-if="currentTimeX !== null" class="vgt__now" :style="{ left: currentTimeX + 'px' }" />
                 </div>
 
+                <svg
+                    v-if="dependencyPaths.length"
+                    class="vgt__dependencies"
+                    :style="{ left: groupWidth + 'px', width: contentWidth + 'px', height: totalHeight + 'px' }"
+                    :viewBox="`0 0 ${contentWidth} ${totalHeight}`"
+                >
+                    <defs>
+                        <marker
+                            :id="arrowMarkerId"
+                            viewBox="0 0 8 8"
+                            refX="7"
+                            refY="4"
+                            markerWidth="8"
+                            markerHeight="8"
+                            markerUnits="userSpaceOnUse"
+                            orient="auto"
+                        >
+                            <path d="M 0 0 L 8 4 L 0 8 z" class="vgt__dependency-head" />
+                        </marker>
+                    </defs>
+                    <path
+                        v-for="path in dependencyPaths"
+                        :key="path.key"
+                        class="vgt__dependency"
+                        :class="[path.dependency.className, { 'vgt__dependency--chain': highlightedChain?.dependencies.has(path.dependency) }]"
+                        :style="path.dependency.style || {}"
+                        :d="path.d"
+                        :marker-end="`url(#${arrowMarkerId})`"
+                    />
+                </svg>
+
                 <div
                     v-for="row in visibleRows"
                     :key="row.key"
@@ -1029,6 +1103,7 @@ defineExpose({ scrollToGroup, setWindow, rows, axis, timeToX, xToTime })
                     </div>
                 </div>
 
+
                 <div v-if="rows.length === 0" class="vgt__empty">
                     <slot name="empty">Aucun groupe à afficher</slot>
                 </div>
@@ -1051,6 +1126,8 @@ defineExpose({ scrollToGroup, setWindow, rows, axis, timeToX, xToTime })
     --vgt-item-border: #7fb5e6;
     --vgt-item-text: #10314f;
     --vgt-now: #ef4444;
+    --vgt-dependency: #64748b;
+    --vgt-chain: #f59e0b;
     --vgt-row-height: 40px;
 
     display: flex;
@@ -1254,6 +1331,8 @@ defineExpose({ scrollToGroup, setWindow, rows, axis, timeToX, xToTime })
 
 .vgt__item {
     position: absolute;
+    /* Au-dessus des flèches de dépendance, elles-mêmes au-dessus des fonds. */
+    z-index: 1;
     display: flex;
     align-items: center;
     box-sizing: border-box;
@@ -1317,6 +1396,36 @@ defineExpose({ scrollToGroup, setWindow, rows, axis, timeToX, xToTime })
 .vgt__item:hover .vgt__handle {
     opacity: 1;
     background: rgba(15, 23, 42, 0.2);
+}
+
+.vgt__dependencies {
+    position: absolute;
+    top: 0;
+    z-index: 1;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.vgt__dependency {
+    fill: none;
+    stroke: var(--vgt-dependency);
+    stroke-width: 1.5;
+}
+
+.vgt__dependency--chain {
+    stroke: var(--vgt-chain);
+    stroke-width: 2.5;
+}
+
+.vgt__item--chain {
+    z-index: 2;
+    box-shadow: 0 0 0 2px var(--vgt-chain), 0 0 10px 3px color-mix(in srgb, var(--vgt-chain) 55%, transparent);
+}
+
+.vgt__dependency-head {
+    fill: var(--vgt-dependency);
+    /* La pointe prend la couleur de son trait, `className` / `style` compris. */
+    fill: context-stroke;
 }
 
 .vgt__empty {

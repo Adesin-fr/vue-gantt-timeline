@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import GanttTimeline from '../src/GanttTimeline.vue'
-import type { GanttGroup, GanttItem, GanttItemMoveEvent } from '../src/types'
+import type { GanttDependency, GanttGroup, GanttItem, GanttItemMoveEvent } from '../src/types'
 
 const DAY = 86_400_000
 const HOUR = 3_600_000
@@ -13,6 +13,7 @@ const editable = ref(true)
 const useSlot = ref(true)
 const pannable = ref(true)
 const zoomable = ref(true)
+const showDependencies = ref(true)
 
 function startOfDay(date: Date) {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -57,6 +58,24 @@ function generate() {
     groups.value = nextGroups
     items.value = nextItems
 }
+
+// Une chaîne d'une ressource à la suivante sur le premier bloc, et le deuxième bloc de
+// chaque ressource qui attend son troisième.
+const dependencies = computed<GanttDependency[]>(() => {
+    if (!showDependencies.value) {
+        return []
+    }
+    const links: GanttDependency[] = []
+    for (let g = 0; g < groupCount.value; g++) {
+        if (g + 1 < groupCount.value && itemsPerGroup.value > 0) {
+            links.push({ from: `${g}-0`, to: `${g + 1}-0` })
+        }
+        if (itemsPerGroup.value > 2) {
+            links.push({ from: `${g}-1`, to: `${g}-2` })
+        }
+    }
+    return links
+})
 
 const groups = ref<GanttGroup[]>([])
 const items = ref<GanttItem[]>([])
@@ -109,6 +128,7 @@ function goToToday() {
             <label><input v-model="useSlot" type="checkbox" /> rendu par slot</label>
             <label><input v-model="pannable" type="checkbox" /> pan</label>
             <label><input v-model="zoomable" type="checkbox" /> zoom</label>
+            <label><input v-model="showDependencies" type="checkbox" /> dépendances</label>
             <span>{{ items.length }} blocs · {{ visibleDays.toFixed(1) }} j affichés</span>
         </div>
 
@@ -118,6 +138,7 @@ function goToToday() {
             v-model:end="windowEnd"
             :groups="groups"
             :items="items"
+            :dependencies="dependencies"
             :editable="editable"
             :pannable="pannable"
             :zoomable="zoomable"

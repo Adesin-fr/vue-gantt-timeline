@@ -7,6 +7,8 @@ export { buildTimeAxis, toMs, floorDate, addDate } from './utils/time'
 export type { ForcedTimeScale, TimeAxis, TimeUnit } from './utils/time'
 export { VisibleTimeline, parseHiddenRanges, shiftByVisible, visibleDuration } from './utils/hidden'
 export { stackItems } from './utils/stack'
+export { buildDependencyPaths, dependencyChain } from './utils/dependencies'
+export type { DependencyMetrics, GanttDependencyChain, GanttDependencyPath } from './utils/dependencies'
 
 export default {
     install(app: App) {

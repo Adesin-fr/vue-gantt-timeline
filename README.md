@@ -63,6 +63,8 @@ revient à sa position d'origine.
 | --- | --- | --- |
 | `groups` | — | lignes du planning (`{ id, label?, className?, style?, minHeight? }`) |
 | `items` | — | blocs (`{ id, group, start, end?, content?, title?, className?, style?, type?, editable? }`) |
+| `dependencies` | `[]` | flèches entre blocs (`{ id?, from, to, className?, style? }`), voir ci-dessous |
+| `dependencyKey` | id du bloc | `(item) => clé` : blocs mis en évidence ensemble dans une chaîne de dépendances |
 | `start`, `end` | — | fenêtre affichée (`Date`, timestamp, ISO ou `YYYY-MM-DD HH:mm:ss`) |
 | `editable` | `false` | `boolean` ou `{ updateTime, updateGroup }`, surchargeable par bloc |
 | `snap` | `900000` | arrondi pendant un déplacement : ms ou `(date, kind) => date` |
@@ -111,7 +113,7 @@ Le composant expose aussi `setWindow(start, end)`, `scrollToGroup(id)`, `timeToX
 ### Personnalisation
 
 Les couleurs passent par des variables CSS sur `.vgt` (`--vgt-item-bg`, `--vgt-border`,
-`--vgt-now`, …) ; `className` et `style` sur un bloc ou un groupe restent prioritaires.
+`--vgt-now`, `--vgt-dependency`, `--vgt-chain`, …) ; `className` et `style` sur un bloc ou un groupe restent prioritaires.
 
 ## Développement
 
@@ -146,3 +148,25 @@ Les plages masquées ne prennent aucune largeur : le temps visible est mis bout 
 pointillé marque chaque coupure, et les blocs entièrement masqués ne sont pas rendus. Un bloc à cheval
 sur une coupure est affiché d'un seul tenant. `zoomMin` / `zoomMax` s'appliquent à la durée *visible*.
 `start` / `end` (et `range-change`) restent de vrais instants.
+
+## Flèches de dépendance
+
+`dependencies` reçoit un tableau de `{ id?, from, to, className?, style? }`, où `from` et `to` sont des
+ids de blocs. La flèche part du bord droit de `from` et arrive sur le bord gauche de `to`, au milieu de
+leur ligne d'empilement, en coudes à angle droit. Si `to` commence avant la fin de `from`, elle
+contourne en passant entre les deux lignes.
+
+Les flèches suivent un bloc pendant son déplacement. Celles dont un des deux blocs n'est pas rendu
+(hors fenêtre, masqué, ou d'un groupe absent) ne sont pas tracées. Elles ne captent pas la souris.
+La couleur se règle par `--vgt-dependency`, ou par `className` / `style` (`stroke`) sur une
+dépendance ; la pointe suit la couleur du trait.
+
+Dès qu'on saisit un bloc pour le déplacer ou le redimensionner, toute sa chaîne est mise en
+évidence : ses parents et ses enfants, de proche en proche, reçoivent un halo
+(`vgt__item--chain`) et les flèches qui les relient sont renforcées (`vgt__dependency--chain`),
+couleur `--vgt-chain`. Les branches sœurs (les autres blocs qui attendent un même parent) ne sont
+pas concernées. `dependencyKey` regroupe plusieurs blocs en un seul maillon, par exemple une
+même tâche affichée sur la ligne de chacun de ses intervenants.
+
+`buildDependencyPaths(rows, dependencies, metrics)` est exporté pour qui veut tracer ses flèches
+lui-même à partir de `rows` (exposé par le composant).

@@ -45,6 +45,21 @@ export interface GanttItem {
     [key: string]: unknown
 }
 
+/**
+ * Flèche de dépendance : elle part du bord droit du bloc `from` et arrive sur le bord
+ * gauche du bloc `to`.
+ */
+export interface GanttDependency {
+    id?: string | number
+    /** Id du bloc dont dépend `to`. */
+    from: string | number
+    /** Id du bloc qui attend `from`. */
+    to: string | number
+    className?: string
+    style?: string | Record<string, string>
+    [key: string]: unknown
+}
+
 export interface GanttEditable {
     /** Autorise le déplacement / redimensionnement dans le temps. */
     updateTime: boolean
