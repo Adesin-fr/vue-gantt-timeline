@@ -28,8 +28,10 @@ interface Anchor {
  * Calcule les flèches de dépendance : chacune part du bord droit du bloc `from` et arrive
  * sur le bord gauche du bloc `to`, au milieu de leur ligne d'empilement.
  *
- * Quand le bloc suivant commence avant la fin du précédent, la flèche contourne : elle descend entre les
- * deux lignes avant de revenir vers la gauche. Une dépendance dont l'un des blocs n'est
+ * Les flèches sont des courbes de Bézier : une courbe en S d'une ligne à l'autre, arrondie
+ * même quand la fin et le début coïncident. Quand le bloc suivant commence avant la fin du
+ * précédent, la flèche contourne : elle s'arrondit entre les deux lignes avant de revenir
+ * vers la gauche. Une dépendance dont l'un des blocs n'est
  * pas rendu (hors fenêtre, masqué ou absent) n'est pas tracée.
  */
 export function buildDependencyPaths(
@@ -70,17 +72,31 @@ export function buildDependencyPaths(
         const y2 = to.y
         let d: string
 
-        if (x2 >= x1) {
-            // Coude à `stub` du départ, ou au milieu de l'écart quand il est trop court pour ça.
-            const midX = x2 - x1 >= stub * 2 ? x1 + stub : (x1 + x2) / 2
-            d = y1 === y2 ? `M ${x1} ${y1} H ${x2}` : `M ${x1} ${y1} H ${midX} V ${y2} H ${x2}`
+        // Les points de contrôle sont horizontaux aux deux bouts : la flèche sort du bloc vers
+        // la droite et entre dans le suivant par la gauche, la pointe reste donc bien orientée.
+        // `bend` fixe la largeur minimale de l'arrondi, pour qu'il reste visible même quand
+        // la fin et le début coïncident.
+        const bend = stub * 3
+
+        if (x2 >= x1 && y1 !== y2) {
+            // Courbe en S d'une ligne à l'autre.
+            const k = Math.max(bend, (x2 - x1) / 2)
+            d = `M ${x1} ${y1} C ${x1 + k} ${y1}, ${x2 - k} ${y2}, ${x2} ${y2}`
+        } else if (x2 - x1 >= stub * 2) {
+            // Même ligne d'empilement, assez d'écart : le trait droit se voit.
+            d = `M ${x1} ${y1} H ${x2}`
         } else {
-            // Le contournement passe sur la bordure entre les deux lignes, ou sous le bloc
-            // de départ quand les deux blocs sont sur la même ligne.
+            // Contournement : le bloc suivant commence avant la fin du précédent, ou juste
+            // après sur la même ligne. La flèche s'arrondit vers la bordure entre les deux
+            // lignes (ou sous le bloc de départ sur une même ligne), revient vers la gauche
+            // puis s'arrondit de nouveau pour entrer dans le bloc suivant.
+            // Sur une même ligne, l'arrondi descend un peu sous le bloc pour ne pas s'y cacher.
+            const clearance = metrics.laneHeight / 2 + Math.max(metrics.laneGap / 2, stub / 2)
             const midY = y2 >= y1
-                ? (from.rowBottom <= to.rowTop ? from.rowBottom : y1 + metrics.laneHeight / 2 + metrics.laneGap / 2)
-                : (to.rowBottom <= from.rowTop ? from.rowTop : y1 - metrics.laneHeight / 2 - metrics.laneGap / 2)
-            d = `M ${x1} ${y1} H ${x1 + stub} V ${midY} H ${x2 - stub} V ${y2} H ${x2}`
+                ? (from.rowBottom <= to.rowTop ? from.rowBottom : y1 + clearance)
+                : (to.rowBottom <= from.rowTop ? from.rowTop : y1 - clearance)
+            d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x1 + bend} ${midY}, ${x1} ${midY}`
+                + ` H ${x2} C ${x2 - bend} ${midY}, ${x2 - bend} ${y2}, ${x2} ${y2}`
         }
 
         paths.push({
